@@ -16,15 +16,17 @@ import (
 
 // RepoInfo describes a repository to cache.
 type RepoInfo struct {
-	URL         string
-	Description string
+	URL           string
+	Description   string
+	DefaultBranch string
 }
 
 // CachedRepo describes a cached bare clone ready for worktree creation.
 type CachedRepo struct {
-	URL         string // remote URL
-	Description string // human-readable description
-	LocalPath   string // absolute path to the bare clone
+	URL           string // remote URL
+	Description   string // human-readable description
+	LocalPath     string // absolute path to the bare clone
+	DefaultBranch string // default branch to use for worktrees
 }
 
 // Cache manages bare git clones for workspace repositories.
@@ -199,6 +201,12 @@ func gitFetch(barePath string) error {
 	return nil
 }
 
+// gitRefExists checks whether a given ref exists in a bare repo.
+func gitRefExists(barePath, ref string) error {
+	cmd := exec.Command("git", "-C", barePath, "rev-parse", "--verify", ref)
+	return cmd.Run()
+}
+
 // runGitFetch is the raw `git fetch origin` wrapper. Callers should go through
 // gitFetch, which migrates legacy caches first.
 func runGitFetch(barePath string) error {
@@ -263,11 +271,12 @@ func setFetchRefspec(barePath, refspec string) error {
 
 // WorktreeParams holds inputs for creating a worktree from a cached bare clone.
 type WorktreeParams struct {
-	WorkspaceID string // workspace that owns the repo
-	RepoURL     string // remote URL to look up in the cache
-	WorkDir     string // parent directory for the worktree (e.g. task workdir)
-	AgentName   string // for branch naming
-	TaskID      string // for branch naming uniqueness
+	WorkspaceID   string // workspace that owns the repo
+	RepoURL       string // remote URL to look up in the cache
+	WorkDir       string // parent directory for the worktree (e.g. task workdir)
+	AgentName     string // for branch naming
+	TaskID        string // for branch naming uniqueness
+	DefaultBranch string // explicit default branch (empty = auto-detect)
 }
 
 // WorktreeResult describes a successfully created worktree.
@@ -307,13 +316,25 @@ func (c *Cache) CreateWorktree(params WorktreeParams) (*WorktreeResult, error) {
 		)
 	}
 
-	// Determine the default branch to base the worktree on. getRemoteDefaultBranch
-	// walks origin/HEAD → origin/main, origin/master → bare-HEAD hint into
-	// origin/<same> → single-entry scan of origin/* → bare HEAD (only if
-	// origin/* is empty). Reaching "" here means the cache is in a state we
-	// refuse to guess from (no origin/HEAD, no main/master, bare HEAD doesn't
-	// match any origin/* entry, and origin/* has multiple candidates).
-	baseRef := getRemoteDefaultBranch(barePath)
+	// Determine the default branch to base the worktree on.
+	// If an explicit default branch is provided, use it directly.
+	// Otherwise, fall back to auto-detection via getRemoteDefaultBranch.
+	var baseRef string
+	if params.DefaultBranch != "" {
+		baseRef = "origin/" + params.DefaultBranch
+		// Verify the ref actually exists in the bare clone.
+		if err := gitRefExists(barePath, baseRef); err != nil {
+			// Fallback to auto-detection if the specified branch doesn't exist.
+			c.logger.Warn("repo checkout: specified default branch not found, falling back to auto-detect",
+				"url", params.RepoURL,
+				"branch", params.DefaultBranch,
+				"error", err,
+			)
+			baseRef = getRemoteDefaultBranch(barePath)
+		}
+	} else {
+		baseRef = getRemoteDefaultBranch(barePath)
+	}
 	if baseRef == "" {
 		return nil, fmt.Errorf("cannot resolve default branch for %s: bare cache at %s has no usable refs (origin/* is empty or ambiguous and bare HEAD has no match). The cache may be corrupted; delete it and retry", params.RepoURL, barePath)
 	}

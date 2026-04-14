@@ -59,6 +59,7 @@ import type { UpdateIssueRequest, IssueStatus, IssuePriority, TimelineEntry } fr
 import { ALL_STATUSES, STATUS_CONFIG, PRIORITY_ORDER, PRIORITY_CONFIG } from "@multica/core/issues/config";
 import { StatusIcon, PriorityIcon, StatusPicker, PriorityPicker, DueDatePicker, AssigneePicker, canAssignAgent } from ".";
 import { ProjectPicker } from "../../projects/components/project-picker";
+import { RepoPicker, type RepoPickerValue } from "./pickers/repo-picker";
 import { CommentCard } from "./comment-card";
 import { CommentInput } from "./comment-input";
 import { AgentLiveCard, TaskRunHistory } from "./agent-live-card";
@@ -1227,6 +1228,15 @@ export function IssueDetail({ issueId, onDelete, defaultSidebarOpen = true, layo
                 <ProjectPicker
                   projectId={issue.project_id}
                   onUpdate={handleUpdateField}
+                />
+              </PropRow>
+
+              {/* Repos */}
+              <PropRow label="Repos">
+                <RepoPicker
+                  selected={(issue.repos ?? []) as RepoPickerValue[]}
+                  workspaceRepos={(workspace?.repos ?? []) as RepoPickerValue[]}
+                  onChange={(repos) => handleUpdateField({ repos })}
                 />
               </PropRow>
             </div>}

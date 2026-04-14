@@ -1,3 +1,5 @@
+import type { WorkspaceRepo } from "./workspace";
+
 export type IssueStatus =
   | "backlog"
   | "todo"
@@ -37,6 +39,7 @@ export interface Issue {
   project_id: string | null;
   position: number;
   due_date: string | null;
+  repos?: WorkspaceRepo[];
   reactions?: IssueReaction[];
   created_at: string;
   updated_at: string;

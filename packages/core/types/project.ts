@@ -5,6 +5,7 @@ export type ProjectPriority = "urgent" | "high" | "medium" | "low" | "none";
 export interface ProjectRepo {
   url: string;
   description: string;
+  default_branch?: string;
 }
 
 export interface Project {

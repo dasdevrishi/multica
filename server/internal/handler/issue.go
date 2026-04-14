@@ -42,10 +42,15 @@ type IssueResponse struct {
 	UpdatedAt          string                  `json:"updated_at"`
 	Reactions          []IssueReactionResponse `json:"reactions,omitempty"`
 	Attachments        []AttachmentResponse    `json:"attachments,omitempty"`
+	Repos              any                     `json:"repos,omitempty"`
 }
 
 func issueToResponse(i db.Issue, issuePrefix string) IssueResponse {
 	identifier := issuePrefix + "-" + strconv.Itoa(int(i.Number))
+	var repos any
+	if i.Repos != nil && len(i.Repos) > 0 {
+		_ = json.Unmarshal(i.Repos, &repos)
+	}
 	return IssueResponse{
 		ID:            uuidToString(i.ID),
 		WorkspaceID:   uuidToString(i.WorkspaceID),
@@ -65,12 +70,17 @@ func issueToResponse(i db.Issue, issuePrefix string) IssueResponse {
 		DueDate:       timestampToPtr(i.DueDate),
 		CreatedAt:     timestampToString(i.CreatedAt),
 		UpdatedAt:     timestampToString(i.UpdatedAt),
+		Repos:         repos,
 	}
 }
 
 // issueListRowToResponse converts a list-query row (no description) to an IssueResponse.
 func issueListRowToResponse(i db.ListIssuesRow, issuePrefix string) IssueResponse {
 	identifier := issuePrefix + "-" + strconv.Itoa(int(i.Number))
+	var repos any
+	if i.Repos != nil && len(i.Repos) > 0 {
+		_ = json.Unmarshal(i.Repos, &repos)
+	}
 	return IssueResponse{
 		ID:            uuidToString(i.ID),
 		WorkspaceID:   uuidToString(i.WorkspaceID),
@@ -89,11 +99,16 @@ func issueListRowToResponse(i db.ListIssuesRow, issuePrefix string) IssueRespons
 		DueDate:       timestampToPtr(i.DueDate),
 		CreatedAt:     timestampToString(i.CreatedAt),
 		UpdatedAt:     timestampToString(i.UpdatedAt),
+		Repos:         repos,
 	}
 }
 
 func openIssueRowToResponse(i db.ListOpenIssuesRow, issuePrefix string) IssueResponse {
 	identifier := issuePrefix + "-" + strconv.Itoa(int(i.Number))
+	var repos any
+	if i.Repos != nil && len(i.Repos) > 0 {
+		_ = json.Unmarshal(i.Repos, &repos)
+	}
 	return IssueResponse{
 		ID:            uuidToString(i.ID),
 		WorkspaceID:   uuidToString(i.WorkspaceID),
@@ -112,6 +127,7 @@ func openIssueRowToResponse(i db.ListOpenIssuesRow, issuePrefix string) IssueRes
 		DueDate:       timestampToPtr(i.DueDate),
 		CreatedAt:     timestampToString(i.CreatedAt),
 		UpdatedAt:     timestampToString(i.UpdatedAt),
+		Repos:         repos,
 	}
 }
 
@@ -766,6 +782,7 @@ type CreateIssueRequest struct {
 	ProjectID          *string  `json:"project_id"`
 	DueDate            *string  `json:"due_date"`
 	AttachmentIDs      []string `json:"attachment_ids,omitempty"`
+	Repos              []any    `json:"repos,omitempty"`
 }
 
 func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
@@ -865,6 +882,14 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 	// Determine creator identity: agent (via X-Agent-ID header) or member.
 	creatorType, actualCreatorID := h.resolveActor(r, creatorID, workspaceID)
 
+	// Marshal repos to JSON for DB storage
+	var reposJSON []byte
+	if len(req.Repos) > 0 {
+		reposJSON, _ = json.Marshal(req.Repos)
+	} else {
+		reposJSON = []byte("[]")
+	}
+
 	issue, err := qtx.CreateIssue(r.Context(), db.CreateIssueParams{
 		WorkspaceID:        parseUUID(workspaceID),
 		Title:              req.Title,
@@ -880,6 +905,7 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 		DueDate:            dueDate,
 		Number:             issueNumber,
 		ProjectID:          projectID,
+		Repos:              reposJSON,
 	})
 	if err != nil {
 		slog.Warn("create issue failed", append(logger.RequestAttrs(r), "error", err, "workspace_id", workspaceID)...)
@@ -938,6 +964,7 @@ type UpdateIssueRequest struct {
 	DueDate            *string  `json:"due_date"`
 	ParentIssueID      *string  `json:"parent_issue_id"`
 	ProjectID          *string  `json:"project_id"`
+	Repos              []any    `json:"repos,omitempty"`
 }
 
 func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
@@ -1058,6 +1085,14 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 			params.ProjectID = parseUUID(*req.ProjectID)
 		} else {
 			params.ProjectID = pgtype.UUID{Valid: false}
+		}
+	}
+	// repos — only update when explicitly present in JSON
+	if _, ok := rawFields["repos"]; ok {
+		if len(req.Repos) > 0 {
+			params.Repos, _ = json.Marshal(req.Repos)
+		} else {
+			params.Repos = []byte("[]")
 		}
 	}
 

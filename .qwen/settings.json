@@ -32,7 +32,15 @@
       "Bash('cd /users/devrishidas/multica/apps/web && frontend_port=3002 npx next dev --port 3002')",
       "Bash(ps *)",
       "Bash(wc *)",
-      "Bash(exec *)"
+      "Bash(exec *)",
+      "Bash(sqlc *)",
+      "Bash(xargs *)",
+      "Bash(disown)",
+      "Bash(set *)",
+      "Bash(test *)",
+      "Bash(tr *)",
+      "Bash(/opt/homebrew/bin/multica *)",
+      "Bash(true)"
     ]
   },
   "$version": 3

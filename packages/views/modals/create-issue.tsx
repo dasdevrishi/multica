@@ -15,6 +15,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@multica/ui/components/
 import { Button } from "@multica/ui/components/ui/button";
 import { ContentEditor, type ContentEditorRef, TitleEditor, useFileDropZone, FileDropOverlay } from "../editor";
 import { StatusIcon, StatusPicker, PriorityPicker, AssigneePicker, DueDatePicker } from "../issues/components";
+import { RepoPicker, type RepoPickerValue } from "../issues/components/pickers/repo-picker";
 import { ProjectPicker } from "../projects/components/project-picker";
 import { useWorkspaceStore } from "@multica/core/workspace";
 import { useIssueDraftStore } from "@multica/core/issues/stores/draft-store";
@@ -53,7 +54,9 @@ function PillButton({
 
 export function CreateIssueModal({ onClose, data }: { onClose: () => void; data?: Record<string, unknown> | null }) {
   const router = useNavigation();
-  const workspaceName = useWorkspaceStore((s) => s.workspace?.name);
+  const workspace = useWorkspaceStore((s) => s.workspace);
+  const workspaceName = workspace?.name;
+  const workspaceRepos = (workspace?.repos ?? []) as RepoPickerValue[];
 
   const draft = useIssueDraftStore((s) => s.draft);
   const setDraft = useIssueDraftStore((s) => s.setDraft);
@@ -74,6 +77,7 @@ export function CreateIssueModal({ onClose, data }: { onClose: () => void; data?
     (data?.project_id as string) || undefined,
   );
   const [isExpanded, setIsExpanded] = useState(false);
+  const [repos, setRepos] = useState<RepoPickerValue[]>([]);
 
   // File upload — collect attachment IDs so we can link them after issue creation.
   const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
@@ -112,6 +116,7 @@ export function CreateIssueModal({ onClose, data }: { onClose: () => void; data?
         attachment_ids: attachmentIds.length > 0 ? attachmentIds : undefined,
         parent_issue_id: (data?.parent_issue_id as string) || undefined,
         project_id: projectId,
+        repos: repos.length > 0 ? repos : undefined,
       });
       clearDraft();
       onClose();
@@ -273,6 +278,13 @@ export function CreateIssueModal({ onClose, data }: { onClose: () => void; data?
             onUpdate={(u) => setProjectId(u.project_id ?? undefined)}
             triggerRender={<PillButton />}
             align="start"
+          />
+
+          {/* Repos */}
+          <RepoPicker
+            selected={repos}
+            workspaceRepos={workspaceRepos}
+            onChange={setRepos}
           />
         </div>
 

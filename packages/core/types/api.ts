@@ -2,6 +2,8 @@ import type { Issue, IssueStatus, IssuePriority, IssueAssigneeType } from "./iss
 import type { MemberRole } from "./workspace";
 import type { Project } from "./project";
 
+import type { WorkspaceRepo } from "./workspace";
+
 // Issue API
 export interface CreateIssueRequest {
   title: string;
@@ -14,6 +16,7 @@ export interface CreateIssueRequest {
   project_id?: string;
   due_date?: string;
   attachment_ids?: string[];
+  repos?: WorkspaceRepo[];
 }
 
 export interface UpdateIssueRequest {
@@ -27,6 +30,7 @@ export interface UpdateIssueRequest {
   due_date?: string | null;
   parent_issue_id?: string | null;
   project_id?: string | null;
+  repos?: WorkspaceRepo[];
 }
 
 export interface ListIssuesParams {

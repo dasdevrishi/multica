@@ -29,22 +29,27 @@ export function useUpdateProject() {
     mutationFn: ({ id, ...data }: { id: string } & UpdateProjectRequest) =>
       api.updateProject(id, data),
     onMutate: ({ id, ...data }) => {
+      console.log("[updateProject] onMutate:", { id, data });
       qc.cancelQueries({ queryKey: projectKeys.list(wsId) });
       const prevList = qc.getQueryData<ListProjectsResponse>(projectKeys.list(wsId));
       const prevDetail = qc.getQueryData<Project>(projectKeys.detail(wsId, id));
+      console.log("[updateProject] prevDetail:", prevDetail);
       qc.setQueryData<ListProjectsResponse>(projectKeys.list(wsId), (old) =>
         old ? { ...old, projects: old.projects.map((p) => (p.id === id ? { ...p, ...data } : p)) } : old,
       );
-      qc.setQueryData<Project>(projectKeys.detail(wsId, id), (old) =>
-        old ? { ...old, ...data } : old,
-      );
+      qc.setQueryData<Project>(projectKeys.detail(wsId, id), (old) => {
+        const merged = old ? { ...old, ...data } : old;
+        console.log("[updateProject] optimistic merge:", merged?.workspace_folder);
+        return merged;
+      });
       return { prevList, prevDetail, id };
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.prevList) qc.setQueryData(projectKeys.list(wsId), ctx.prevList);
       if (ctx?.prevDetail) qc.setQueryData(projectKeys.detail(wsId, ctx.id), ctx.prevDetail);
     },
-    onSettled: (_data, _err, vars) => {
+    onSettled: (data, _err, vars) => {
+      console.log("[updateProject] onSettled response:", data?.workspace_folder);
       qc.invalidateQueries({ queryKey: projectKeys.detail(wsId, vars.id) });
       qc.invalidateQueries({ queryKey: projectKeys.list(wsId) });
     },

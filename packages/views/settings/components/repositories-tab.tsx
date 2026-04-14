@@ -89,6 +89,14 @@ export function RepositoriesTab() {
                     placeholder="Description (e.g. Go backend + Next.js frontend)"
                     className="text-sm"
                   />
+                  <Input
+                    type="text"
+                    value={repo.default_branch || ""}
+                    onChange={(e) => handleRepoChange(index, "default_branch", e.target.value)}
+                    disabled={!canManageWorkspace}
+                    placeholder="Default branch (e.g. main, develop)"
+                    className="text-sm"
+                  />
                 </div>
                 {canManageWorkspace && (
                   <Button

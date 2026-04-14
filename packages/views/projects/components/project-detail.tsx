@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback, useRef } from "react";
+import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { useDefaultLayout, usePanelRef } from "react-resizable-panels";
 import { Check, ChevronRight, FolderOpen, GitBranch, Link2, ListTodo, MoreHorizontal, PanelRight, Pin, PinOff, Plus, Trash2, UserMinus, X as XIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -187,42 +187,64 @@ function WorkspaceFolderEditor({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? "");
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  if (editing) {
+  // Sync external value → draft when entering edit mode
+  useEffect(() => {
+    if (editing) {
+      setDraft(value ?? "");
+      inputRef.current?.focus();
+    }
+  }, [editing, value]);
+
+  const handleSave = () => {
+    if (!editing) return;
+    const val = draft.trim() || null;
+    onSave(val);
+    setEditing(false);
+  };
+
+  if (!editing) {
     return (
-      <input
-        type="text"
-        autoFocus
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            onSave(draft.trim() || null);
-            setEditing(false);
-          }
-          if (e.key === "Escape") setEditing(false);
-        }}
-        onBlur={() => {
-          onSave(draft.trim() || null);
-          setEditing(false);
-        }}
-        placeholder="/path/to/workspace"
-        className="w-full bg-transparent text-xs placeholder:text-muted-foreground outline-none border-b border-primary/30"
-      />
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="inline-flex items-center gap-1.5 text-xs hover:text-foreground transition-colors truncate"
+      >
+        <FolderOpen className="h-3 w-3 shrink-0 text-muted-foreground" />
+        <span className={value ? "" : "text-muted-foreground"}>
+          {value || "Set workspace folder"}
+        </span>
+      </button>
     );
   }
 
   return (
-    <button
-      type="button"
-      onClick={() => { setDraft(value ?? ""); setEditing(true); }}
-      className="inline-flex items-center gap-1.5 text-xs hover:text-foreground transition-colors truncate"
-    >
-      <FolderOpen className="h-3 w-3 shrink-0 text-muted-foreground" />
-      <span className={value ? "" : "text-muted-foreground"}>
-        {value || "Set workspace folder"}
-      </span>
-    </button>
+    <input
+      ref={inputRef}
+      type="text"
+      value={draft}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        console.log("[workspace_folder] draft changed:", e.target.value);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          console.log("[workspace_folder] Enter pressed, saving:", draft.trim() || null);
+          handleSave();
+        }
+        if (e.key === "Escape") {
+          setEditing(false);
+        }
+      }}
+      onBlur={() => {
+        console.log("[workspace_folder] blur fired, saving:", draft.trim() || null);
+        handleSave();
+      }}
+      placeholder="/path/to/workspace"
+      className="w-full bg-transparent text-xs placeholder:text-muted-foreground outline-none border-b border-primary/30"
+    />
   );
 }
 
@@ -231,23 +253,25 @@ function WorkspaceFolderEditor({
 // ---------------------------------------------------------------------------
 
 function ProjectReposSection({
-  repos,
+  repos = [],
   onUpdate,
 }: {
-  repos: { url: string; description: string }[];
-  onUpdate: (repos: { url: string; description: string }[]) => void;
+  repos?: { url: string; description: string; default_branch?: string }[];
+  onUpdate: (repos: { url: string; description: string; default_branch?: string }[]) => void;
 }) {
   const [reposOpen, setReposOpen] = useState(true);
   const [addingRepo, setAddingRepo] = useState(false);
   const [newUrl, setNewUrl] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [newBranch, setNewBranch] = useState("");
 
   const handleAdd = () => {
     const url = newUrl.trim();
     if (!url) return;
-    onUpdate([...repos, { url, description: newDesc.trim() }]);
+    onUpdate([...repos, { url, description: newDesc.trim(), default_branch: newBranch.trim() || undefined }]);
     setNewUrl("");
     setNewDesc("");
+    setNewBranch("");
     setAddingRepo(false);
   };
 
@@ -269,21 +293,35 @@ function ProjectReposSection({
       {reposOpen && (
         <div className="pl-2 space-y-2">
           {repos.map((repo, i) => (
-            <div key={`${repo.url}-${i}`} className="group flex items-start gap-2 rounded-md px-2 py-1.5 -mx-2 hover:bg-accent/50 transition-colors">
-              <GitBranch className="h-3.5 w-3.5 shrink-0 mt-0.5 text-muted-foreground" />
-              <div className="min-w-0 flex-1">
-                <div className="text-xs font-mono truncate" title={repo.url}>{repo.url}</div>
-                {repo.description && (
-                  <div className="text-xs text-muted-foreground truncate">{repo.description}</div>
-                )}
+            <div key={`${repo.url}-${i}`} className="group rounded-md border px-2 py-1.5">
+              <div className="flex items-start gap-2">
+                <GitBranch className="h-3.5 w-3.5 shrink-0 mt-0.5 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-mono truncate" title={repo.url}>{repo.url}</div>
+                  {repo.description && (
+                    <div className="text-xs text-muted-foreground truncate">{repo.description}</div>
+                  )}
+                  <input
+                    type="text"
+                    value={repo.default_branch || ""}
+                    onChange={(e) => {
+                      const updated = repos.map((r, idx) =>
+                        idx === i ? { ...r, default_branch: e.target.value || undefined } : r,
+                      );
+                      onUpdate(updated);
+                    }}
+                    placeholder="Default branch (e.g. main, develop)"
+                    className="mt-1 w-full bg-transparent text-xs placeholder:text-muted-foreground outline-none border rounded px-1.5 py-0.5"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRemove(i)}
+                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-destructive/10 hover:text-destructive transition-all shrink-0"
+                >
+                  <XIcon className="h-3 w-3" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => handleRemove(i)}
-                className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-destructive/10 hover:text-destructive transition-all shrink-0"
-              >
-                <XIcon className="h-3 w-3" />
-              </button>
             </div>
           ))}
 
@@ -306,6 +344,17 @@ function ProjectReposSection({
                 value={newDesc}
                 onChange={(e) => setNewDesc(e.target.value)}
                 placeholder="Description (optional)"
+                className="w-full bg-transparent text-xs placeholder:text-muted-foreground outline-none"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleAdd();
+                  if (e.key === "Escape") setAddingRepo(false);
+                }}
+              />
+              <input
+                type="text"
+                value={newBranch}
+                onChange={(e) => setNewBranch(e.target.value)}
+                placeholder="Default branch (e.g. main, develop)"
                 className="w-full bg-transparent text-xs placeholder:text-muted-foreground outline-none"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleAdd();
@@ -386,7 +435,8 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
 
   const handleUpdateField = useCallback(
     (data: Parameters<typeof updateProject.mutate>[0] extends { id: string } & infer R ? R : never) => {
-      if (!project) return;
+      if (!project) { console.warn("[project] handleUpdateField: no project"); return; }
+      console.log("[project] handleUpdateField:", JSON.stringify(data));
       updateProject.mutate({ id: project.id, ...data });
     },
     [project, updateProject],
@@ -722,12 +772,11 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
                 </div>}
               </div>
 
-              {/* Repositories */}
-              <ProjectReposSection
-                repos={project.repos}
-                onUpdate={(repos) => handleUpdateField({ repos })}
-              />
-              </div>
+            {/* Repositories */}
+            <ProjectReposSection
+              repos={project.repos}
+              onUpdate={(repos) => handleUpdateField({ repos })}
+            />
 
               {/* Progress */}
               {issueMetrics.totalCount > 0 && (() => {

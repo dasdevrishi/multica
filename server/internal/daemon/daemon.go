@@ -965,11 +965,12 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, taskLo
 		// Create worktrees for each repo.
 		for i, repo := range task.Repos {
 			wt, err := d.repoCache.CreateWorktree(repocache.WorktreeParams{
-				WorkspaceID: task.WorkspaceID,
-				RepoURL:     repo.URL,
-				WorkDir:     env.WorkDir,
-				AgentName:   agentName,
-				TaskID:      task.ID,
+				WorkspaceID:   task.WorkspaceID,
+				RepoURL:       repo.URL,
+				WorkDir:       env.WorkDir,
+				AgentName:     agentName,
+				TaskID:        task.ID,
+				DefaultBranch: repo.DefaultBranch,
 			})
 			if err != nil {
 				taskLog.Warn("auto-checkout failed", "url", repo.URL, "error", err)
