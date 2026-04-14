@@ -50,6 +50,7 @@ import type {
   CreatePinRequest,
   PinnedItemType,
   ReorderPinsRequest,
+  DetectedRepo,
 } from "../types";
 import { type Logger, noopLogger } from "../logger";
 import { createRequestId } from "../utils";
@@ -541,6 +542,14 @@ export class ApiClient {
     return this.fetch(`/api/workspaces/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),
+    });
+  }
+
+  // Daemon / repo scanning
+  async scanRepos(path: string): Promise<{ detected: DetectedRepo[] }> {
+    return this.fetch(`/api/daemon/scan-repos`, {
+      method: "POST",
+      body: JSON.stringify({ path }),
     });
   }
 

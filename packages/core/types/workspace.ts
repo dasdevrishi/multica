@@ -6,6 +6,15 @@ export interface WorkspaceRepo {
   default_branch?: string;
 }
 
+export interface DetectedRepo {
+  local_path: string;
+  remote_url: string;
+  current_branch?: string;
+  remotes?: Record<string, string>;
+  description?: string;
+  default_branch?: string;
+}
+
 export interface Workspace {
   id: string;
   name: string;

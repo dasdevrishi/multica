@@ -13,6 +13,7 @@ import { useWorkspaceId } from "@multica/core/hooks";
 import { memberListOptions } from "@multica/core/workspace/queries";
 import { api } from "@multica/core/api";
 import type { WorkspaceRepo } from "@multica/core/types";
+import { RepoScanner } from "./repo-scanner";
 
 export function RepositoriesTab() {
   const user = useAuthStore((s) => s.user);
@@ -63,6 +64,18 @@ export function RepositoriesTab() {
     <div className="space-y-8">
       <section className="space-y-4">
         <h2 className="text-sm font-semibold">Repositories</h2>
+
+        {canManageWorkspace && (
+          <Card>
+            <CardContent className="space-y-3 pt-4">
+              <h3 className="text-sm font-medium">Auto-detect from folder</h3>
+              <p className="text-xs text-muted-foreground">
+                Scan a local folder to find git repositories and add them to this workspace.
+              </p>
+              <RepoScanner />
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardContent className="space-y-3">

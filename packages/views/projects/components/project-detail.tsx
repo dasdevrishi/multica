@@ -2,12 +2,13 @@
 
 import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { useDefaultLayout, usePanelRef } from "react-resizable-panels";
-import { Check, ChevronRight, FolderOpen, GitBranch, Link2, ListTodo, MoreHorizontal, PanelRight, Pin, PinOff, Plus, Trash2, UserMinus, X as XIcon } from "lucide-react";
+import { Check, ChevronRight, FolderOpen, FolderSearch, GitBranch, Globe, Link2, ListTodo, MoreHorizontal, PanelRight, Pin, PinOff, Plus, Trash2, UserMinus, X as XIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@multica/ui/lib/utils";
 import { toast } from "sonner";
-import type { Issue, IssueStatus, ProjectStatus, ProjectPriority } from "@multica/core/types";
+import type { Issue, IssueStatus, ProjectStatus, ProjectPriority, DetectedRepo } from "@multica/core/types";
 import { useAuthStore } from "@multica/core/auth";
+import { api } from "@multica/core/api";
 import { projectDetailOptions } from "@multica/core/projects/queries";
 import { useUpdateProject, useDeleteProject } from "@multica/core/projects/mutations";
 import { pinListOptions } from "@multica/core/pins";
@@ -63,6 +64,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@multica/ui/components/ui/alert-dialog";
+import { Checkbox } from "@multica/ui/components/ui/checkbox";
 
 // ---------------------------------------------------------------------------
 // Property row — sidebar property display
@@ -253,9 +255,11 @@ function WorkspaceFolderEditor({
 // ---------------------------------------------------------------------------
 
 function ProjectReposSection({
+  workspaceFolder,
   repos = [],
   onUpdate,
 }: {
+  workspaceFolder?: string | null;
   repos?: { url: string; description: string; default_branch?: string }[];
   onUpdate: (repos: { url: string; description: string; default_branch?: string }[]) => void;
 }) {
@@ -264,6 +268,12 @@ function ProjectReposSection({
   const [newUrl, setNewUrl] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [newBranch, setNewBranch] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const [detected, setDetected] = useState<DetectedRepo[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [savingScan, setSavingScan] = useState(false);
+
+  const existingUrls = new Set(repos.map((r) => r.url));
 
   const handleAdd = () => {
     const url = newUrl.trim();
@@ -278,6 +288,70 @@ function ProjectReposSection({
   const handleRemove = (index: number) => {
     onUpdate(repos.filter((_, i) => i !== index));
   };
+
+  const handleScan = async () => {
+    const path = workspaceFolder;
+    if (!path) {
+      toast.error("Set a workspace folder first to scan for repos");
+      return;
+    }
+
+    setScanning(true);
+    setDetected([]);
+    setSelected(new Set());
+
+    try {
+      const res = await api.scanRepos(path);
+      const newRepos = res.detected.filter((r) => r.remote_url && !existingUrls.has(r.remote_url));
+      setDetected(newRepos);
+      if (newRepos.length === 0) {
+        toast.info("No new repositories found");
+      } else {
+        toast.success(`Found ${newRepos.length} new repo(s)`);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to scan folder");
+      setDetected([]);
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const toggleSelect = (remoteUrl: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(remoteUrl)) next.delete(remoteUrl);
+      else next.add(remoteUrl);
+      return next;
+    });
+  };
+
+  const handleAddSelected = async () => {
+    if (selected.size === 0) return;
+
+    setSavingScan(true);
+    try {
+      const newRepos = detected
+        .filter((r) => selected.has(r.remote_url))
+        .map((r) => ({
+          url: r.remote_url,
+          description: r.description || r.local_path.split("/").pop() || "",
+          default_branch: r.default_branch || undefined,
+        }));
+
+      onUpdate([...repos, ...newRepos]);
+      toast.success(`Added ${newRepos.length} repo(s)`);
+      setDetected([]);
+      setSelected(new Set());
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to add repos");
+    } finally {
+      setSavingScan(false);
+    }
+  };
+
+  const selectAll = () => setSelected(new Set(detected.map((r) => r.remote_url)));
+  const deselectAll = () => setSelected(new Set());
 
   return (
     <div>
@@ -371,14 +445,76 @@ function ProjectReposSection({
               </div>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => setAddingRepo(true)}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 -mx-2 py-1"
-            >
-              <Plus className="h-3 w-3" />
-              Add repository
-            </button>
+            <div className="flex items-center gap-2 px-2 py-1">
+              <button
+                type="button"
+                onClick={() => setAddingRepo(true)}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Plus className="h-3 w-3" />
+                Add repository
+              </button>
+              <button
+                type="button"
+                onClick={handleScan}
+                disabled={scanning}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <FolderSearch className="h-3 w-3" />
+                {scanning ? "Scanning..." : "Scan repos"}
+              </button>
+            </div>
+          )}
+
+          {/* Scan results */}
+          {detected.length > 0 && (
+            <div className="rounded-md border p-2 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">
+                  {detected.length} repo(s) found
+                </p>
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="xs" onClick={selectAll}>Select all</Button>
+                  <Button variant="ghost" size="xs" onClick={deselectAll}>Deselect</Button>
+                </div>
+              </div>
+
+              {detected.map((repo) => (
+                <div
+                  key={repo.remote_url}
+                  className="flex items-start gap-2 rounded-md bg-accent/50 px-2 py-1.5"
+                >
+                  <Checkbox
+                    checked={selected.has(repo.remote_url)}
+                    onCheckedChange={() => toggleSelect(repo.remote_url)}
+                    className="mt-0.5"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <Globe className="h-3 w-3 text-muted-foreground shrink-0" />
+                      <span className="text-xs font-medium truncate">
+                        {repo.description || repo.remote_url}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground font-mono truncate">
+                      {repo.remote_url}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground font-mono truncate" title={repo.local_path}>
+                      {repo.local_path}
+                    </p>
+                  </div>
+                </div>
+              ))}
+
+              <Button
+                size="xs"
+                onClick={handleAddSelected}
+                disabled={selected.size === 0 || savingScan}
+              >
+                <Plus className="h-3 w-3" />
+                {savingScan ? "Adding..." : `Add ${selected.size} repo(s)`}
+              </Button>
+            </div>
           )}
         </div>
       )}
@@ -774,6 +910,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
 
             {/* Repositories */}
             <ProjectReposSection
+              workspaceFolder={project.workspace_folder}
               repos={project.repos}
               onUpdate={(repos) => handleUpdateField({ repos })}
             />

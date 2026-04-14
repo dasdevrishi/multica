@@ -41,21 +41,22 @@ func WithDaemonContext(ctx context.Context, workspaceID, daemonID string) contex
 
 // DaemonAuth validates daemon auth tokens (mdt_ prefix) or falls back to
 // JWT/PAT validation for backward compatibility with daemons that
-// authenticate via user tokens.
+// authenticate via user tokens. It also supports cookie-based auth for
+// browser clients (e.g. the web app calling scan-repos).
 func DaemonAuth(queries *db.Queries) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
-				slog.Debug("daemon_auth: missing authorization header", "path", r.URL.Path)
+			tokenString, fromCookie := extractDaemonToken(r)
+			if tokenString == "" {
+				slog.Debug("daemon_auth: no token found", "path", r.URL.Path)
 				writeError(w, http.StatusUnauthorized, "missing authorization header")
 				return
 			}
 
-			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-			if tokenString == authHeader {
-				slog.Debug("daemon_auth: invalid format", "path", r.URL.Path)
-				writeError(w, http.StatusUnauthorized, "invalid authorization format")
+			// Cookie-based auth requires CSRF validation for state-changing methods.
+			if fromCookie && !auth.ValidateCSRF(r) {
+				slog.Debug("daemon_auth: CSRF validation failed", "path", r.URL.Path)
+				writeError(w, http.StatusForbidden, "CSRF validation failed")
 				return
 			}
 
@@ -117,4 +118,21 @@ func DaemonAuth(queries *db.Queries) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// extractDaemonToken returns the bearer token and whether it came from a cookie.
+// Priority: Authorization header > multica_auth cookie.
+func extractDaemonToken(r *http.Request) (token string, fromCookie bool) {
+	if authHeader := r.Header.Get("Authorization"); authHeader != "" {
+		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+		if tokenString != authHeader {
+			return tokenString, false
+		}
+	}
+
+	if cookie, err := r.Cookie(auth.AuthCookieName); err == nil && cookie.Value != "" {
+		return cookie.Value, true
+	}
+
+	return "", false
 }
