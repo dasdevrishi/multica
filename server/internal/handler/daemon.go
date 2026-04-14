@@ -393,14 +393,34 @@ func (h *Handler) ClaimTaskByRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Include workspace ID and repos so the daemon can set up worktrees.
+	// Priority: project repos > workspace repos (fallback).
 	if task.IssueID.Valid {
 		if issue, err := h.Queries.GetIssue(r.Context(), task.IssueID); err == nil {
 			resp.WorkspaceID = uuidToString(issue.WorkspaceID)
-			if ws, err := h.Queries.GetWorkspace(r.Context(), issue.WorkspaceID); err == nil && ws.Repos != nil {
-				var repos []RepoData
-				if json.Unmarshal(ws.Repos, &repos) == nil && len(repos) > 0 {
-					resp.Repos = repos
+
+			// Try project-level repos first.
+			var repos []RepoData
+			if issue.ProjectID.Valid {
+				if project, err := h.Queries.GetProject(r.Context(), issue.ProjectID); err == nil {
+					if project.Repos != nil {
+						var projectRepos []RepoData
+						if json.Unmarshal(project.Repos, &projectRepos) == nil && len(projectRepos) > 0 {
+							repos = projectRepos
+						}
+					}
 				}
+			}
+			// Fall back to workspace repos if no project repos.
+			if len(repos) == 0 {
+				if ws, err := h.Queries.GetWorkspace(r.Context(), issue.WorkspaceID); err == nil && ws.Repos != nil {
+					var wsRepos []RepoData
+					if json.Unmarshal(ws.Repos, &wsRepos) == nil && len(wsRepos) > 0 {
+						repos = wsRepos
+					}
+				}
+			}
+			if len(repos) > 0 {
+				resp.Repos = repos
 			}
 		}
 

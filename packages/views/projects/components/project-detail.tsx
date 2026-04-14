@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useCallback, useRef } from "react";
 import { useDefaultLayout, usePanelRef } from "react-resizable-panels";
-import { Check, ChevronRight, Link2, ListTodo, MoreHorizontal, PanelRight, Pin, PinOff, Trash2, UserMinus } from "lucide-react";
+import { Check, ChevronRight, FolderOpen, GitBranch, Link2, ListTodo, MoreHorizontal, PanelRight, Pin, PinOff, Plus, Trash2, UserMinus, X as XIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@multica/ui/lib/utils";
 import { toast } from "sonner";
@@ -169,6 +169,169 @@ function ProjectIssuesContent({ projectIssues }: { projectIssues: Issue[] }) {
           childProgressMap={childProgressMap}
           doneTotal={doneColumnCount}
         />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Workspace folder editor
+// ---------------------------------------------------------------------------
+
+function WorkspaceFolderEditor({
+  value,
+  onSave,
+}: {
+  value: string | null;
+  onSave: (v: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+
+  if (editing) {
+    return (
+      <input
+        type="text"
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            onSave(draft.trim() || null);
+            setEditing(false);
+          }
+          if (e.key === "Escape") setEditing(false);
+        }}
+        onBlur={() => {
+          onSave(draft.trim() || null);
+          setEditing(false);
+        }}
+        placeholder="/path/to/workspace"
+        className="w-full bg-transparent text-xs placeholder:text-muted-foreground outline-none border-b border-primary/30"
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => { setDraft(value ?? ""); setEditing(true); }}
+      className="inline-flex items-center gap-1.5 text-xs hover:text-foreground transition-colors truncate"
+    >
+      <FolderOpen className="h-3 w-3 shrink-0 text-muted-foreground" />
+      <span className={value ? "" : "text-muted-foreground"}>
+        {value || "Set workspace folder"}
+      </span>
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Project repos section
+// ---------------------------------------------------------------------------
+
+function ProjectReposSection({
+  repos,
+  onUpdate,
+}: {
+  repos: { url: string; description: string }[];
+  onUpdate: (repos: { url: string; description: string }[]) => void;
+}) {
+  const [reposOpen, setReposOpen] = useState(true);
+  const [addingRepo, setAddingRepo] = useState(false);
+  const [newUrl, setNewUrl] = useState("");
+  const [newDesc, setNewDesc] = useState("");
+
+  const handleAdd = () => {
+    const url = newUrl.trim();
+    if (!url) return;
+    onUpdate([...repos, { url, description: newDesc.trim() }]);
+    setNewUrl("");
+    setNewDesc("");
+    setAddingRepo(false);
+  };
+
+  const handleRemove = (index: number) => {
+    onUpdate(repos.filter((_, i) => i !== index));
+  };
+
+  return (
+    <div>
+      <button
+        className={`flex w-full items-center gap-1 text-xs font-medium transition-colors mb-2 ${reposOpen ? "" : "text-muted-foreground hover:text-foreground"}`}
+        onClick={() => setReposOpen(!reposOpen)}
+      >
+        <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${reposOpen ? "rotate-90" : ""}`} />
+        Repositories
+        <span className="text-muted-foreground ml-1">({repos.length})</span>
+      </button>
+
+      {reposOpen && (
+        <div className="pl-2 space-y-2">
+          {repos.map((repo, i) => (
+            <div key={`${repo.url}-${i}`} className="group flex items-start gap-2 rounded-md px-2 py-1.5 -mx-2 hover:bg-accent/50 transition-colors">
+              <GitBranch className="h-3.5 w-3.5 shrink-0 mt-0.5 text-muted-foreground" />
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-mono truncate" title={repo.url}>{repo.url}</div>
+                {repo.description && (
+                  <div className="text-xs text-muted-foreground truncate">{repo.description}</div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => handleRemove(i)}
+                className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-destructive/10 hover:text-destructive transition-all shrink-0"
+              >
+                <XIcon className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+
+          {addingRepo ? (
+            <div className="space-y-1.5 rounded-md border p-2">
+              <input
+                type="text"
+                autoFocus
+                value={newUrl}
+                onChange={(e) => setNewUrl(e.target.value)}
+                placeholder="https://github.com/org/repo.git"
+                className="w-full bg-transparent text-xs font-mono placeholder:text-muted-foreground outline-none"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleAdd();
+                  if (e.key === "Escape") setAddingRepo(false);
+                }}
+              />
+              <input
+                type="text"
+                value={newDesc}
+                onChange={(e) => setNewDesc(e.target.value)}
+                placeholder="Description (optional)"
+                className="w-full bg-transparent text-xs placeholder:text-muted-foreground outline-none"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleAdd();
+                  if (e.key === "Escape") setAddingRepo(false);
+                }}
+              />
+              <div className="flex gap-1.5">
+                <Button size="xs" variant="default" onClick={handleAdd} disabled={!newUrl.trim()}>
+                  Add
+                </Button>
+                <Button size="xs" variant="ghost" onClick={() => setAddingRepo(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAddingRepo(true)}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 -mx-2 py-1"
+            >
+              <Plus className="h-3 w-3" />
+              Add repository
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -548,7 +711,22 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
                       </PopoverContent>
                     </Popover>
                   </PropRow>
+
+                  {/* Workspace folder */}
+                  <PropRow label="Folder">
+                    <WorkspaceFolderEditor
+                      value={project.workspace_folder}
+                      onSave={(v) => handleUpdateField({ workspace_folder: v })}
+                    />
+                  </PropRow>
                 </div>}
+              </div>
+
+              {/* Repositories */}
+              <ProjectReposSection
+                repos={project.repos}
+                onUpdate={(repos) => handleUpdateField({ repos })}
+              />
               </div>
 
               {/* Progress */}

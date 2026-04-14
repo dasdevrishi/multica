@@ -949,6 +949,41 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, taskLo
 		}
 	}
 
+	// Auto-checkout repos into the working directory so the agent has code context.
+	// If a single repo is present, set the agent's CWD to the repo worktree.
+	var branchName string
+	if d.repoCache != nil && len(task.Repos) > 0 {
+		// Ensure repos are cached (clone or fetch).
+		repoInfos := make([]repocache.RepoInfo, len(task.Repos))
+		for i, r := range task.Repos {
+			repoInfos[i] = repocache.RepoInfo{URL: r.URL, Description: r.Description}
+		}
+		if err := d.repoCache.Sync(task.WorkspaceID, repoInfos); err != nil {
+			taskLog.Warn("repo cache sync failed (non-fatal)", "error", err)
+		}
+
+		// Create worktrees for each repo.
+		for i, repo := range task.Repos {
+			wt, err := d.repoCache.CreateWorktree(repocache.WorktreeParams{
+				WorkspaceID: task.WorkspaceID,
+				RepoURL:     repo.URL,
+				WorkDir:     env.WorkDir,
+				AgentName:   agentName,
+				TaskID:      task.ID,
+			})
+			if err != nil {
+				taskLog.Warn("auto-checkout failed", "url", repo.URL, "error", err)
+				continue
+			}
+			taskLog.Info("repo auto-checked out", "url", repo.URL, "path", wt.Path, "branch", wt.BranchName)
+			// Set CWD to the first repo's worktree.
+			if i == 0 {
+				env.WorkDir = wt.Path
+				branchName = wt.BranchName
+			}
+		}
+	}
+
 	// Inject runtime-specific config (meta skill) so the agent discovers .agent_context/.
 	if err := execenv.InjectRuntimeConfig(env.WorkDir, provider, taskCtx); err != nil {
 		d.logger.Warn("execenv: inject runtime config failed (non-fatal)", "error", err)
@@ -1063,12 +1098,13 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, taskLo
 			return TaskResult{}, fmt.Errorf("%s returned empty output", provider)
 		}
 		return TaskResult{
-			Status:    "completed",
-			Comment:   result.Output,
-			SessionID: result.SessionID,
-			WorkDir:   env.WorkDir,
-			EnvRoot:   env.RootDir,
-			Usage:     usageEntries,
+			Status:     "completed",
+			Comment:    result.Output,
+			BranchName: branchName,
+			SessionID:  result.SessionID,
+			WorkDir:    env.WorkDir,
+			EnvRoot:    env.RootDir,
+			Usage:      usageEntries,
 		}, nil
 	case "timeout":
 		return TaskResult{}, fmt.Errorf("%s timed out after %s", provider, d.cfg.AgentTimeout)

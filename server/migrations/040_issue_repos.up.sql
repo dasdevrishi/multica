@@ -1,0 +1,2 @@
+ALTER TABLE project ADD COLUMN repos JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE project ADD COLUMN workspace_folder TEXT;

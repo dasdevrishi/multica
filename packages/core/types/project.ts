@@ -2,6 +2,11 @@ export type ProjectStatus = "planned" | "in_progress" | "paused" | "completed" |
 
 export type ProjectPriority = "urgent" | "high" | "medium" | "low" | "none";
 
+export interface ProjectRepo {
+  url: string;
+  description: string;
+}
+
 export interface Project {
   id: string;
   workspace_id: string;
@@ -12,6 +17,8 @@ export interface Project {
   priority: ProjectPriority;
   lead_type: "member" | "agent" | null;
   lead_id: string | null;
+  repos: ProjectRepo[];
+  workspace_folder: string | null;
   created_at: string;
   updated_at: string;
   issue_count: number;
@@ -26,6 +33,8 @@ export interface CreateProjectRequest {
   priority?: ProjectPriority;
   lead_type?: "member" | "agent";
   lead_id?: string;
+  repos?: ProjectRepo[];
+  workspace_folder?: string;
 }
 
 export interface UpdateProjectRequest {
@@ -36,6 +45,8 @@ export interface UpdateProjectRequest {
   priority?: ProjectPriority;
   lead_type?: "member" | "agent" | null;
   lead_id?: string | null;
+  repos?: ProjectRepo[];
+  workspace_folder?: string | null;
 }
 
 export interface ListProjectsResponse {

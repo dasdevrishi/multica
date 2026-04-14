@@ -1,0 +1,2 @@
+ALTER TABLE project DROP COLUMN IF EXISTS workspace_folder;
+ALTER TABLE project DROP COLUMN IF EXISTS repos;
