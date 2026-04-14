@@ -120,8 +120,15 @@ func LoadConfig(overrides Overrides) (Config, error) {
 			Model: strings.TrimSpace(os.Getenv("MULTICA_GEMINI_MODEL")),
 		}
 	}
+	qwenPath := envOrDefault("MULTICA_QWEN_PATH", "qwen")
+	if _, err := exec.LookPath(qwenPath); err == nil {
+		agents["qwencode"] = AgentEntry{
+			Path:  qwenPath,
+			Model: strings.TrimSpace(os.Getenv("MULTICA_QWEN_MODEL")),
+		}
+	}
 	if len(agents) == 0 {
-		return Config{}, fmt.Errorf("no agent CLI found: install claude, codex, opencode, openclaw, hermes, or gemini and ensure it is on PATH")
+		return Config{}, fmt.Errorf("no agent CLI found: install claude, codex, opencode, openclaw, hermes, gemini, or qwen and ensure it is on PATH")
 	}
 
 	// Host info

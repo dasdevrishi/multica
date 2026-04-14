@@ -9,8 +9,9 @@ import (
 // MinVersions defines the minimum required CLI version for each agent type.
 // Versions below these will be rejected during daemon registration.
 var MinVersions = map[string]string{
-	"claude": "2.0.0",
-	"codex":  "0.100.0", // app-server --listen stdio:// added in 0.100.0
+	"claude":   "2.0.0",
+	"codex":    "0.100.0", // app-server --listen stdio:// added in 0.100.0
+	"qwencode": "0.14.0",  // stable streaming JSON output
 }
 
 // semver holds a parsed semantic version (major.minor.patch).
